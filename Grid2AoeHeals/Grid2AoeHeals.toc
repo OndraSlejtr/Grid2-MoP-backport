@@ -15,6 +15,7 @@ AoeHeals.lua
 AoeHealsOptions.lua
 AoeHealsStatusRaid.lua
 AoeHealsStatusParty.lua
+AoeHealsMapData.lua
 AoeHealsStatusChain.lua
 AoeHealsStatusNeighbors.lua
 AoeHealsStatusHighlighter.lua

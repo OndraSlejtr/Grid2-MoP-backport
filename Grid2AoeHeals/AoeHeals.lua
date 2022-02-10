@@ -16,7 +16,7 @@
 		curMask          Bitmask of the current unit, each roster[index] element has a bitmask of 2^(index-1)
 --]]
 
-local AOEM = Grid2:NewModule( "Grid2AoeHeals", "AceEvent-3.0")
+local AOEM = Grid2:NewModule("Grid2AoeHeals")
 
 AOEM.defaultDB = {
 	profile = {
@@ -34,7 +34,7 @@ local UnitExists = UnitExists
 local UnitIsEnemy = UnitIsEnemy
 local UnitIsVisible = UnitIsVisible
 local InCombatLockdown = InCombatLockdown
-local UnitPosition = UnitPosition
+local GetPlayerMapPosition = GetPlayerMapPosition
 local UnitGetIncomingHeals = UnitGetIncomingHeals
 local GetNumGroupMembers = GetNumGroupMembers
 local next = next 
@@ -48,6 +48,7 @@ local tostring = tostring
 local bit_band = bit.band
 
 --{{
+local raidSizes = {raid40= 25, raid25= 25, raid20= 20, raid15=15, raid10=10, party=5, solo=5}
 
 local frame, timer
 local statuses = {} 
@@ -60,6 +61,7 @@ local rosterRaid    	-- precalculated roster tables (40 units) to avoid garbage
 local rosterValid       -- True if roster units are up to date
 local rosterPosValid	-- True if roster units position and health data was updated
 
+local mapValid, mapWidth, mapHeight
 --}}
 
 --{{ Misc functions
@@ -119,12 +121,15 @@ end
 --{{ Timer
 
 local function TimerEvent()
-	if UnitPosition("player") then
+	mapWidth, mapHeight = AOEM:MapGetSize()
+	if mapWidth then
+		mapValid = true
 		rosterPosValid = false
 		for _, status in next,statuses do
 			status:Update()
 		end
-	else
+	elseif mapValid then
+		mapValid = false
 		ClearAllIndicators()
 	end	
 end
@@ -138,7 +143,7 @@ local function SetTimer(enable)
 		else
 			Grid2:CancelTimer(timer)
 			timer = nil
-			if UnitPosition("player") then ClearAllIndicators() end
+			if mapValid then ClearAllIndicators() end
 			AOEM:Debug("Aoe Heals Timer Disabled.")
 		end
 	end
@@ -155,20 +160,19 @@ local function status_GetFilteredRoster()
 		local chEnabled= AOEM.chEnabled
 		if not rosterValid then	UpdateRoster() end
 		wipe(rosterv)
-		local _, _, _, pMap = UnitPosition("player")
 		for i=1,#roster do
 			local p = roster[i]
 			local u = p.unit
-			local x, y, _, uMap = UnitPosition(u)
-			if UnitExists(u) and (not UnitIsDeadOrGhost(u)) and UnitIsVisible(u) and (not UnitIsEnemy("player", u)) and uMap == pMap then
+			if UnitExists(u) and (not UnitIsDeadOrGhost(u)) and UnitIsVisible(u) and (not UnitIsEnemy("player", u)) then
 				local hc = UnitHealth(u)
 				local hm = UnitHealthMax(u)
 				local hd = hm - hc
 				if hd>0 or (not chEnabled) then
+					local x,y = GetPlayerMapPosition(u)
 					p.deficit = max( hd - (UnitGetIncomingHeals(u) or 0), 0 )
 					p.percent = hc / hm
-					p.x 	  = x
-					p.y 	  = y
+					p.x 	  = x * mapWidth
+					p.y 	  = y * mapHeight
 					rosterv[#rosterv+1] = p
 				end	
 			end	
@@ -252,6 +256,7 @@ local function status_OnEnable(self)
 		frame:RegisterEvent("PARTY_MEMBERS_CHANGED")
 		frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 		frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+		AOEM:MapEnable()
 		UpdateTimerState()
 	end	
 	tinsert(statuses, self)
@@ -268,6 +273,7 @@ local function status_OnDisable(self)
 		frame:UnregisterEvent("PARTY_MEMBERS_CHANGED")
 		frame:UnregisterEvent("PLAYER_REGEN_DISABLED" )
 		frame:UnregisterEvent("PLAYER_REGEN_ENABLED" )
+		AOEM:MapDisable()
 		SetTimer(false)
 	end	
 	if self.StatusDisabled then	self:StatusDisabled() end
